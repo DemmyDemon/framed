@@ -9,9 +9,19 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const (
+	battMaxVolt       = 4.05
+	battMinVolt       = 0.45
+	battMinPercentage = 10
+	battMaxPercentage = 95
+)
+
+var batteryVoltage float32
 
 //go:embed html/index.html
 var pageTemplate string
@@ -61,6 +71,17 @@ func (srv Server) verbose(level int, line string) {
 	}
 }
 
+func (srv Server) battPercent() string {
+	if batteryVoltage <= battMinVolt {
+		return " !! BATTERY LOW !! "
+	}
+	if batteryVoltage >= battMaxVolt {
+		return ", Battery full"
+	}
+	percentage := (batteryVoltage-battMinVolt)/(battMaxVolt-battMinVolt)*(battMaxPercentage-battMinPercentage) + battMinPercentage
+	return fmt.Sprintf(", Battery %.0f%%", percentage)
+}
+
 func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	remote := strings.SplitN(r.RemoteAddr, ":", 2)[0]
@@ -99,10 +120,13 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			srv.log(fmt.Sprintf("[%s] Failed executing template: %s", remote, err))
 		}
 	case "/image":
+
+		battery := srv.battPercent()
 		now := time.Now()
 		_, week := now.ISOWeek()
+
 		lines := []string{
-			fmt.Sprintf("%s, week %d", now.Format("15:04 Monday"), week),
+			fmt.Sprintf("%s, week %d%s", now.Format("15:04 Monday"), week, battery),
 		}
 
 		lines = append(lines, Lines...)
@@ -129,6 +153,18 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		srv.log(fmt.Sprintf("[%s] %d bytes of image data sent", remote, size))
 		return
 	case "/api/display":
+
+		voltStr := r.Header.Get("Battery-Voltage")
+		if voltStr != "" {
+			srv.verbose(2, fmt.Sprintf("[%s] Battery voltage is %s", req, voltStr))
+			voltage, err := strconv.ParseFloat(voltStr, 32)
+			if err != nil {
+				srv.log(err.Error())
+			} else {
+				batteryVoltage = float32(voltage)
+			}
+		}
+
 		now := time.Now()
 		resp, err := json.Marshal(DisplayResponse{
 			FileName:        fmt.Sprintf("screen-%d.png", now.Unix()),
