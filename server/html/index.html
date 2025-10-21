@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>TRMNL text: Simplified!</title>
+        <style>
+            body {
+                text-align: center;
+                margin: 0 auto;
+                background-color: rgb(75, 75, 75);
+                color: white;
+            }
+            button {
+                display: block;
+                margin: 0 auto;
+            }
+        </style>
+    </head>
+    <body>
+        <div><img src="/image" alt="Generated image"></div>
+        <div>
+            <form action="/" method="POST">
+                <textarea id="text" cols="50" rows="12" name="text">{{.Text}}</textarea>
+                <button type="submit">Update</button>
+            </form>
+        </div>
+    </body>
+</html>
