@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image/png"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/sergeymakinen/go-bmp"
 )
 
 type DisplayResponse struct {
@@ -66,15 +65,18 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.RequestURI {
 	case "/image":
+		now := time.Now()
+		_, week := now.ISOWeek()
 		screen := CreateScreen([]string{
+			fmt.Sprintf("%s, week %d", now.Format("15:04 Monday"), week),
 			"This is placeholder text",
 			"This is *more* placeholder text",
 		})
 		w.WriteHeader(http.StatusOK)
-		w.Header().Add("Content-Type", "image/bmp")
+		w.Header().Add("Content-Type", "image/png")
 
 		var buf bytes.Buffer
-		err := bmp.Encode(&buf, screen)
+		err := png.Encode(&buf, screen)
 		if err != nil {
 			srv.log(fmt.Sprintf("[%s] Failed buffer image data: %s", remote, err))
 			return
@@ -89,10 +91,11 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		srv.log(fmt.Sprintf("[%s] %d bytes of image data sent", remote, size))
 		return
 	case "/api/display":
+		now := time.Now()
 		resp, err := json.Marshal(DisplayResponse{
-			FileName:        fmt.Sprintf("screen-%d.bmp", time.Now().Unix()/10),
+			FileName:        fmt.Sprintf("screen-%d.png", now.Unix()/10),
 			ImageUrl:        fmt.Sprintf("http://%s/image", r.Host),
-			RefreshRate:     60,
+			RefreshRate:     max(10, 60-now.Second()),
 			SpecialFunction: "sleep",
 		})
 		if err != nil {

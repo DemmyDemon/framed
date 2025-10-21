@@ -20,12 +20,12 @@ var (
 		Font:    mustReadFont(),
 		DPI:     72.0,
 		Hinting: font.HintingNone,
-		Size:    25.0,
+		Size:    32.0,
 		Ratio:   0.65,
 	}
 	PaletteBlackWhite = color.Palette{
-		color.White,
 		color.RGBA{0, 0, 0, 255},
+		color.White,
 	}
 	StandardBounds = image.Rect(0, 0, 800, 480)
 )
