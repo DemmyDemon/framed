@@ -67,11 +67,15 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/image":
 		now := time.Now()
 		_, week := now.ISOWeek()
-		screen := CreateScreen([]string{
+		lines := []string{
 			fmt.Sprintf("%s, week %d", now.Format("15:04 Monday"), week),
-			"This is placeholder text",
-			"This is *more* placeholder text",
-		})
+		}
+
+		for i := 0; i <= 12; i++ {
+			lines = append(lines, fmt.Sprintf("%02d Placeholder text", i))
+		}
+		screen := CreateScreen(lines)
+
 		w.WriteHeader(http.StatusOK)
 		w.Header().Add("Content-Type", "image/png")
 

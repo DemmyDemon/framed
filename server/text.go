@@ -22,6 +22,7 @@ var (
 		Hinting: font.HintingNone,
 		Size:    32.0,
 		Ratio:   0.65,
+		Offset:  10,
 	}
 	PaletteBlackWhite = color.Palette{
 		color.RGBA{0, 0, 0, 255},
@@ -36,6 +37,7 @@ type FontDescription struct {
 	Hinting font.Hinting
 	Size    float64
 	Ratio   float64
+	Offset  int
 }
 
 // PrepareFreetypeContext sets up all the bits and bobs related to drawing text on the image
@@ -79,7 +81,7 @@ func CreateScreen(text []string) *image.Paletted {
 
 	ctx, baseline := PrepareFreetypeContext(img, &image.Uniform{PaletteBlackWhite[1]}, fontDescription)
 	for i, line := range text {
-		mustDrawText(ctx, 10, (i*baseline)+baseline, line)
+		mustDrawText(ctx, 15, (i*baseline)+baseline+fontDescription.Offset, line)
 	}
 
 	return img

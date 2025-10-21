@@ -14,7 +14,7 @@ const (
 
 func main() {
 	fmt.Printf("Shall listen on port %d\n", PORT)
-	err := server.Begin(PORT, 2)
+	err := server.Begin(PORT, 1)
 	if err != nil {
 		fmt.Printf("\nERROR:  %v\n", err)
 	}
