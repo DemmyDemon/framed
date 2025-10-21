@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DemmyDemon/framed/ui"
 )
 
 const (
@@ -37,15 +39,18 @@ type DisplayResponse struct {
 	SpecialFunction string `json:"special_function"`
 }
 
+type TextUpdate string
+
 type Server struct {
 	Port      int
 	Verbosity int
 	Template  *template.Template
+	chLog     chan ui.LogEntry
 }
 
 var Lines = []string{"TODO: Make it load the previous text from disk."}
 
-func Begin(port int, verbosity int) error {
+func Begin(port int, verbosity int, chLog chan ui.LogEntry) error {
 
 	tpl, err := template.New("page").Parse(pageTemplate)
 	if err != nil {
@@ -56,18 +61,19 @@ func Begin(port int, verbosity int) error {
 		Port:      port,
 		Verbosity: verbosity,
 		Template:  tpl,
+		chLog:     chLog,
 	}
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), srv)
 }
 
 func (srv Server) log(line string) {
 	if srv.Verbosity > 0 {
-		fmt.Println(line)
+		srv.chLog <- ui.LogEntry{Payload: line}
 	}
 }
 func (srv Server) verbose(level int, line string) {
 	if srv.Verbosity >= level {
-		srv.log(line)
+		srv.chLog <- ui.LogEntry{Payload: line}
 	}
 }
 
