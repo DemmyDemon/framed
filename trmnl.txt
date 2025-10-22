@@ -6,4 +6,8 @@
 [X] Much quicker updates!
 [X] Lower the update frequency at night
 [X] Update the weekday after midnight
+[X] Have Ctrl+S on the log screen save to
+    trmnl.log
 [ ] Celebrate
+[ ] Figure out the display length
+[ ] Make sure going over it is fine

@@ -1,13 +1,18 @@
 package ui
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const maxEntries = 200
+const (
+	maxEntries = 200
+	logfile    = "framed.log"
+)
 
 type LogEntry struct {
 	Payload []string
@@ -56,6 +61,22 @@ func (ls LogScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "ctrl+s":
+			file, err := os.Create(logfile)
+			if err != nil {
+				return ls, NewLogEntryCmd(fmt.Sprintf("Creating %s: %s", logfile, err.Error()))
+			}
+			defer file.Close() // FIXME: Yes, that means we eat the close error, if any
+
+			written := 0
+			for _, line := range ls.entries {
+				write, err := file.Write([]byte(line + "\n"))
+				if err != nil {
+					return ls, NewLogEntryCmd(fmt.Sprintf("Opening %s: %s", logfile, err.Error()))
+				}
+				written += write
+			}
+			return ls, NewLogEntryCmd(fmt.Sprintf("Wrote %d bytes to %s", written, logfile))
 		case " ", "enter":
 			return ls, NewLogEntryCmd(time.Now().Format("--- 2006-01-02 15:04:05 ---"))
 		}
