@@ -5,12 +5,12 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"image/png"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DemmyDemon/framed/ui"
@@ -26,7 +26,7 @@ const (
 var batteryVoltage float32
 
 //go:embed html/index.html
-var pageTemplate string
+var indexhtml []byte
 
 type DisplayResponse struct {
 	Status          int    `json:"status"`
@@ -39,31 +39,37 @@ type DisplayResponse struct {
 	SpecialFunction string `json:"special_function"`
 }
 
-type TextUpdate string
-
 type Server struct {
 	Port      int
 	Verbosity int
-	Template  *template.Template
 	chLog     chan ui.LogEntry
+	chText    chan string
 }
 
-var Lines = []string{"TODO: Make it load the previous text from disk."}
+var muLines sync.Mutex
+var Lines = []string{"TODO: Make it load the previous text", "from disk."}
 
-func Begin(port int, verbosity int, chLog chan ui.LogEntry) error {
-
-	tpl, err := template.New("page").Parse(pageTemplate)
-	if err != nil {
-		return fmt.Errorf("embedded template: %w", err)
-	}
+func Begin(port int, verbosity int, chLog chan ui.LogEntry, chText chan string) error {
 
 	srv := Server{
 		Port:      port,
 		Verbosity: verbosity,
-		Template:  tpl,
 		chLog:     chLog,
+		chText:    chText,
 	}
+
+	go srv.updateLines()
+
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), srv)
+}
+
+func (srv Server) updateLines() {
+	for text := range srv.chText {
+		srv.verbose(2, "Recieved text")
+		muLines.Lock()
+		Lines = strings.Split(text, "\n")
+		muLines.Unlock()
+	}
 }
 
 func (srv Server) log(line string) {
@@ -109,22 +115,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/":
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/html")
-		if r.Method == "POST" {
-			err := r.ParseForm()
-			if err != nil {
-				srv.log(fmt.Sprintf("[%s] Failed reading POST: %s", remote, err))
-				return
-			}
-			text := r.PostForm.Get("text")
-			Lines = strings.Split(text, "\n")
-			for _, line := range Lines {
-				srv.verbose(2, line)
-			}
-		}
-		err := srv.Template.Execute(w, struct{ Text string }{Text: strings.Join(Lines, "\n")})
-		if err != nil {
-			srv.log(fmt.Sprintf("[%s] Failed executing template: %s", remote, err))
-		}
+		w.Write(indexhtml)
 	case "/image":
 
 		battery := srv.battPercent()
@@ -134,8 +125,9 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		lines := []string{
 			fmt.Sprintf("%s, week %d%s", now.Format("15:04 Monday"), week, battery),
 		}
-
+		muLines.Lock()
 		lines = append(lines, Lines...)
+		muLines.Unlock()
 		screen := CreateScreen(lines)
 
 		w.Header().Set("Content-Type", "image/png")

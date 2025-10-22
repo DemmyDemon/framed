@@ -18,10 +18,10 @@ const (
 func main() {
 	fmt.Printf("Shall listen on port %d\n", PORT)
 
-	chLog, _, prog := ui.NewUI()
+	chLog, chText, prog := ui.NewUI()
 
 	go func() {
-		err := server.Begin(PORT, 1, chLog)
+		err := server.Begin(PORT, 2, chLog, chText)
 		if err != nil {
 			fmt.Printf("\nERROR:  %v\n", err)
 			os.Exit(9)
