@@ -10,18 +10,15 @@ import (
 )
 
 const (
-	PORT   = 7100
-	WIDTH  = 800
-	HEIGHT = 480
+	PORT = 7100
 )
 
 func main() {
-	fmt.Printf("Shall listen on port %d\n", PORT)
 
 	chLog, chText, prog := ui.NewUI()
-
 	go func() {
-		err := server.Begin(PORT, 2, chLog, chText)
+		chLog <- ui.NewLogEntry(fmt.Sprintf("Shall listen on port %d\n", PORT))
+		err := server.Begin(PORT, 1, chLog, chText)
 		if err != nil {
 			fmt.Printf("\nERROR:  %v\n", err)
 			os.Exit(9)

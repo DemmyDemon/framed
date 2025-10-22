@@ -10,11 +10,12 @@ import (
 )
 
 type InputScreen struct {
-	height   int
-	width    int
-	publish  chan string
-	textarea textarea.Model
-	drity    bool
+	height      int
+	width       int
+	publish     chan string
+	textarea    textarea.Model
+	drity       bool
+	flushedText string
 }
 
 var (
@@ -52,14 +53,15 @@ func (is InputScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+s":
-			is.publish <- is.textarea.Value()
+			is.flushedText = is.textarea.Value()
+			is.publish <- is.flushedText
 			is.drity = false
-			return is, mkLogEntry(time.Now().Format("---> SAVE TEXT"))
+			return is, nil
 		}
 	}
 
 	mod, cmd := is.textarea.Update(msg)
-	if mod.Value() != is.textarea.Value() {
+	if mod.Value() != is.flushedText {
 		is.drity = true
 	}
 	is.textarea = mod
@@ -73,6 +75,5 @@ func (is InputScreen) View() string {
 	if is.drity {
 		style = styleDirty
 	}
-	return style.Render(fmt.Sprintf("%s, week %d", now.Format("15:04 Monday"), week)) + "\n" + is.textarea.View()
-	// return fmt.Sprintf("%s, week %d\n", now.Format("15:04 Monday"), week, is.textarea.View())
+	return style.Render(fmt.Sprintf("%s, week %d", now.Format("Monday"), week)) + "\n" + is.textarea.View()
 }

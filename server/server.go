@@ -8,9 +8,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/DemmyDemon/framed/ui"
@@ -22,8 +20,6 @@ const (
 	battMinPercentage = 10
 	battMaxPercentage = 95
 )
-
-var batteryVoltage float32
 
 //go:embed html/index.html
 var indexhtml []byte
@@ -39,15 +35,30 @@ type DisplayResponse struct {
 	SpecialFunction string `json:"special_function"`
 }
 
+type DisplayText struct {
+	Time  time.Time
+	Lines []string
+}
+
+func NewDisplayText(text string) DisplayText {
+	return DisplayText{
+		Lines: strings.Split(text, "\n"),
+		Time:  time.Now(),
+	}
+}
+
+func (dt *DisplayText) Update(text string) {
+	dt.Lines = strings.Split(text, "\n")
+	dt.Time = time.Now()
+}
+
 type Server struct {
 	Port      int
 	Verbosity int
 	chLog     chan ui.LogEntry
 	chText    chan string
+	text      DisplayText
 }
-
-var muLines sync.Mutex
-var Lines = []string{"TODO: Make it load the previous text", "from disk."}
 
 func Begin(port int, verbosity int, chLog chan ui.LogEntry, chText chan string) error {
 
@@ -56,42 +67,30 @@ func Begin(port int, verbosity int, chLog chan ui.LogEntry, chText chan string) 
 		Verbosity: verbosity,
 		chLog:     chLog,
 		chText:    chText,
+		text:      NewDisplayText("TODO: Make it load the previous text\nfrom disk."),
 	}
 
 	go srv.updateLines()
 
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), srv)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), &srv)
 }
 
-func (srv Server) updateLines() {
+func (srv *Server) updateLines() {
 	for text := range srv.chText {
-		srv.verbose(2, "Recieved text")
-		muLines.Lock()
-		Lines = strings.Split(text, "\n")
-		muLines.Unlock()
+		srv.log("Server recieved text update")
+		srv.text.Update(text)
 	}
 }
 
-func (srv Server) log(line string) {
-	if srv.Verbosity > 0 {
+func (srv Server) log(line ...string) {
+	if srv.Verbosity >= 0 {
 		srv.chLog <- ui.LogEntry{Payload: line}
 	}
 }
-func (srv Server) verbose(level int, line string) {
+func (srv Server) verbose(level int, line ...string) {
 	if srv.Verbosity >= level {
 		srv.chLog <- ui.LogEntry{Payload: line}
 	}
-}
-
-func (srv Server) battPercent() string {
-	if batteryVoltage <= battMinVolt {
-		return " !! BATTERY LOW !! "
-	}
-	if batteryVoltage >= battMaxVolt {
-		return ", Battery full"
-	}
-	percentage := (batteryVoltage-battMinVolt)/(battMaxVolt-battMinVolt)*(battMaxPercentage-battMinPercentage) + battMinPercentage
-	return fmt.Sprintf(", Battery %.0f%%", percentage)
 }
 
 func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,16 +117,14 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(indexhtml)
 	case "/image":
 
-		battery := srv.battPercent()
-		now := time.Now()
-		_, week := now.ISOWeek()
+		_, week := srv.text.Time.ISOWeek()
 
 		lines := []string{
-			fmt.Sprintf("%s, week %d%s", now.Format("15:04 Monday"), week, battery),
+			fmt.Sprintf("%s, week %d", srv.text.Time.Format("Monday"), week),
 		}
-		muLines.Lock()
-		lines = append(lines, Lines...)
-		muLines.Unlock()
+		// FIXME: This is probably subject to race conditions
+		// There might be situations where it's reading the lines while they are being updated.
+		lines = append(lines, srv.text.Lines...)
 		screen := CreateScreen(lines)
 
 		w.Header().Set("Content-Type", "image/png")
@@ -152,22 +149,19 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/api/display":
 
-		voltStr := r.Header.Get("Battery-Voltage")
-		if voltStr != "" {
-			srv.verbose(2, fmt.Sprintf("[%s] Battery voltage is %s", req, voltStr))
-			voltage, err := strconv.ParseFloat(voltStr, 32)
-			if err != nil {
-				srv.log(err.Error())
-			} else {
-				batteryVoltage = float32(voltage)
-			}
-		}
+		/*
+			Note to future self:
+			The srv.textTime.Unix() in the "filename" makes the filename only change
+			when the text does.
+			That means the TRMNL doesn't fetch the image if it hasn't changed.
+			This sacrifices "updated" battery display, but whatever. Scrapped feature.
+			REMEMBER TO LOWER THE REFRESH RATE IF YOU PUT THIS BACK! XD
+		*/
 
-		now := time.Now()
 		resp, err := json.Marshal(DisplayResponse{
-			FileName:        fmt.Sprintf("screen-%d.png", now.Unix()),
+			FileName:        fmt.Sprintf("screen-%d.png", srv.text.Time.Unix()),
 			ImageUrl:        fmt.Sprintf("http://%s/image", r.Host),
-			RefreshRate:     max(10, 60-now.Second()),
+			RefreshRate:     10,
 			SpecialFunction: "sleep",
 		})
 		if err != nil {
@@ -184,7 +178,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/log":
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(`Quiet, please`))
+		w.Write([]byte(`Okay, thanks.`))
 		if r.Method != "POST" {
 			return
 		}
@@ -193,6 +187,6 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			srv.log(fmt.Sprintf("Error reading log POST: %s", err))
 			return
 		}
-		srv.verbose(2, string(body))
+		srv.log(string(body))
 	}
 }
