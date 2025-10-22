@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -16,6 +17,7 @@ type InputScreen struct {
 	textarea    textarea.Model
 	drity       bool
 	flushedText string
+	filename    string
 }
 
 var (
@@ -23,18 +25,22 @@ var (
 	styleDirty = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 )
 
-func NewInputScreen() (chan string, InputScreen) {
-	publish := make(chan string)
+func NewInputScreen(initialText string, filename string) (chan string, InputScreen) {
+	publish := make(chan string, 5)
+	publish <- initialText
 	ta := textarea.New()
-	ta.Placeholder = "(TODO: Load initial text from disk)"
+	ta.Placeholder = "(No text yet)"
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.EndOfBufferCharacter = '•'
+	ta.InsertString(initialText)
 	ta.Focus()
 	return publish, InputScreen{
-		height:   10,
-		publish:  publish,
-		textarea: ta,
+		height:      10,
+		publish:     publish,
+		textarea:    ta,
+		flushedText: initialText,
+		filename:    filename,
 	}
 }
 
@@ -56,7 +62,19 @@ func (is InputScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			is.flushedText = is.textarea.Value()
 			is.publish <- is.flushedText
 			is.drity = false
-			return is, nil
+
+			file, err := os.Create(is.filename)
+			if err != nil {
+				return is, NewLogEntryCmd(fmt.Sprintf("Opening %s: %s", is.filename, err.Error()))
+			}
+			defer file.Close() // FIXME: Yes, that means we eat the close error, if any
+
+			written, err := file.Write([]byte(is.flushedText))
+			if err != nil {
+				return is, NewLogEntryCmd(fmt.Sprintf("Writing to %s: %s", is.filename, err.Error()))
+			}
+
+			return is, NewLogEntryCmd(fmt.Sprintf("Wrote %d bytes to %s", written, is.filename))
 		}
 	}
 

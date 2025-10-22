@@ -11,10 +11,10 @@ type UI struct {
 	chText    chan string
 }
 
-func NewUI() (chan LogEntry, chan string, UI) {
+func NewUI(initialText string, filename string) (chan LogEntry, chan string, UI) {
 
 	chLog, logScreen := NewLogScreen()
-	chText, inputScreen := NewInputScreen()
+	chText, inputScreen := NewInputScreen(initialText, filename)
 
 	ui := UI{
 		screens: []tea.Model{inputScreen, logScreen},
