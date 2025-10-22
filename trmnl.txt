@@ -1,0 +1,7 @@
+[X] Load previous text lines from disk
+[X] Save text lines to disk on Ctrl+S
+[ ] Limit line length to TRMNL width
+[ ] Limit line count to TRMNL height
+[X] Fix the damn clean/dirty indicator
+[X] Much quicker updates!
+[ ] Celebrate

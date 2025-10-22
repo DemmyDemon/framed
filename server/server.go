@@ -5,13 +5,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"image/png"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DemmyDemon/framed/ui"
 )
 
 const (
@@ -21,10 +21,8 @@ const (
 	battMaxPercentage = 95
 )
 
-var batteryVoltage float32
-
 //go:embed html/index.html
-var pageTemplate string
+var indexhtml []byte
 
 type DisplayResponse struct {
 	Status          int    `json:"status"`
@@ -37,49 +35,62 @@ type DisplayResponse struct {
 	SpecialFunction string `json:"special_function"`
 }
 
+type DisplayText struct {
+	Time  time.Time
+	Lines []string
+}
+
+func NewDisplayText(text string) DisplayText {
+	return DisplayText{
+		Lines: strings.Split(text, "\n"),
+		Time:  time.Now(),
+	}
+}
+
+func (dt *DisplayText) Update(text string) {
+	dt.Lines = strings.Split(text, "\n")
+	dt.Time = time.Now()
+}
+
 type Server struct {
 	Port      int
 	Verbosity int
-	Template  *template.Template
+	chLog     chan ui.LogEntry
+	chText    chan string
+	text      DisplayText
 }
 
-var Lines = []string{"TODO: Make it load the previous text from disk."}
-
-func Begin(port int, verbosity int) error {
-
-	tpl, err := template.New("page").Parse(pageTemplate)
-	if err != nil {
-		return fmt.Errorf("embedded template: %w", err)
-	}
+func Begin(port int, verbosity int, chLog chan ui.LogEntry, chText chan string) error {
 
 	srv := Server{
 		Port:      port,
 		Verbosity: verbosity,
-		Template:  tpl,
+		chLog:     chLog,
+		chText:    chText,
+		text:      NewDisplayText("TODO: Make it load the previous text\nfrom disk."),
 	}
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), srv)
+
+	go srv.updateLines()
+
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), &srv)
 }
 
-func (srv Server) log(line string) {
-	if srv.Verbosity > 0 {
-		fmt.Println(line)
+func (srv *Server) updateLines() {
+	for text := range srv.chText {
+		srv.log("Server recieved text update")
+		srv.text.Update(text)
 	}
 }
-func (srv Server) verbose(level int, line string) {
+
+func (srv Server) log(line ...string) {
+	if srv.Verbosity >= 0 {
+		srv.chLog <- ui.LogEntry{Payload: line}
+	}
+}
+func (srv Server) verbose(level int, line ...string) {
 	if srv.Verbosity >= level {
-		srv.log(line)
+		srv.chLog <- ui.LogEntry{Payload: line}
 	}
-}
-
-func (srv Server) battPercent() string {
-	if batteryVoltage <= battMinVolt {
-		return " !! BATTERY LOW !! "
-	}
-	if batteryVoltage >= battMaxVolt {
-		return ", Battery full"
-	}
-	percentage := (batteryVoltage-battMinVolt)/(battMaxVolt-battMinVolt)*(battMaxPercentage-battMinPercentage) + battMinPercentage
-	return fmt.Sprintf(", Battery %.0f%%", percentage)
 }
 
 func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -103,33 +114,17 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/":
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "image/html")
-		if r.Method == "POST" {
-			err := r.ParseForm()
-			if err != nil {
-				srv.log(fmt.Sprintf("[%s] Failed reading POST: %s", remote, err))
-				return
-			}
-			text := r.PostForm.Get("text")
-			Lines = strings.Split(text, "\n")
-			for _, line := range Lines {
-				srv.verbose(2, line)
-			}
-		}
-		err := srv.Template.Execute(w, struct{ Text string }{Text: strings.Join(Lines, "\n")})
-		if err != nil {
-			srv.log(fmt.Sprintf("[%s] Failed executing template: %s", remote, err))
-		}
+		w.Write(indexhtml)
 	case "/image":
 
-		battery := srv.battPercent()
-		now := time.Now()
-		_, week := now.ISOWeek()
+		_, week := srv.text.Time.ISOWeek()
 
 		lines := []string{
-			fmt.Sprintf("%s, week %d%s", now.Format("15:04 Monday"), week, battery),
+			fmt.Sprintf("%s, week %d", srv.text.Time.Format("Monday"), week),
 		}
-
-		lines = append(lines, Lines...)
+		// FIXME: This is probably subject to race conditions
+		// There might be situations where it's reading the lines while they are being updated.
+		lines = append(lines, srv.text.Lines...)
 		screen := CreateScreen(lines)
 
 		w.Header().Set("Content-Type", "image/png")
@@ -154,22 +149,19 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/api/display":
 
-		voltStr := r.Header.Get("Battery-Voltage")
-		if voltStr != "" {
-			srv.verbose(2, fmt.Sprintf("[%s] Battery voltage is %s", req, voltStr))
-			voltage, err := strconv.ParseFloat(voltStr, 32)
-			if err != nil {
-				srv.log(err.Error())
-			} else {
-				batteryVoltage = float32(voltage)
-			}
-		}
+		/*
+			Note to future self:
+			The srv.textTime.Unix() in the "filename" makes the filename only change
+			when the text does.
+			That means the TRMNL doesn't fetch the image if it hasn't changed.
+			This sacrifices "updated" battery display, but whatever. Scrapped feature.
+			REMEMBER TO LOWER THE REFRESH RATE IF YOU PUT THIS BACK! XD
+		*/
 
-		now := time.Now()
 		resp, err := json.Marshal(DisplayResponse{
-			FileName:        fmt.Sprintf("screen-%d.png", now.Unix()),
+			FileName:        fmt.Sprintf("screen-%d.png", srv.text.Time.Unix()),
 			ImageUrl:        fmt.Sprintf("http://%s/image", r.Host),
-			RefreshRate:     max(10, 60-now.Second()),
+			RefreshRate:     10,
 			SpecialFunction: "sleep",
 		})
 		if err != nil {
@@ -186,7 +178,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/log":
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte(`Quiet, please`))
+		w.Write([]byte(`Okay, thanks.`))
 		if r.Method != "POST" {
 			return
 		}
@@ -195,6 +187,6 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			srv.log(fmt.Sprintf("Error reading log POST: %s", err))
 			return
 		}
-		srv.verbose(2, string(body))
+		srv.log(string(body))
 	}
 }

@@ -12,6 +12,11 @@ import (
 	"golang.org/x/image/font"
 )
 
+const (
+	WIDTH  = 800
+	HEIGHT = 480
+)
+
 //go:embed "font/White Rabbit.ttf"
 var fontFile []byte
 
@@ -28,7 +33,7 @@ var (
 		color.RGBA{0, 0, 0, 255},
 		color.White,
 	}
-	StandardBounds = image.Rect(0, 0, 800, 480)
+	StandardBounds = image.Rect(0, 0, WIDTH, HEIGHT)
 )
 
 type FontDescription struct {
