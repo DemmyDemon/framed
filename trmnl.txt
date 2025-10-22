@@ -4,4 +4,6 @@
 [ ] Limit line count to TRMNL height
 [X] Fix the damn clean/dirty indicator
 [X] Much quicker updates!
+[X] Lower the update frequency at night
+[X] Update the weekday after midnight
 [ ] Celebrate

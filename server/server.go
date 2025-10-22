@@ -15,10 +15,8 @@ import (
 )
 
 const (
-	battMaxVolt       = 4.05
-	battMinVolt       = 0.45
-	battMinPercentage = 10
-	battMaxPercentage = 95
+	refreshSecondsDay   = 10
+	refreshSecondsNight = 600
 )
 
 //go:embed html/index.html
@@ -154,16 +152,29 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			The srv.textTime.Unix() in the "filename" makes the filename only change
 			when the text does.
 			That means the TRMNL doesn't fetch the image if it hasn't changed.
-			This sacrifices "updated" battery display, but whatever. Scrapped feature.
+			This sacrifices "updated" battery display, and clock, but whatever. Scrapped features.
 			REMEMBER TO LOWER THE REFRESH RATE IF YOU PUT THIS BACK! XD
 		*/
+
+		// Day changes means weekday needs updating, and maybe week number
+		// This applies even if the text didn't actually change.
+		now := time.Now()
+		if now.Day() != srv.text.Time.Day() {
+			srv.text.Time = now
+		}
+
+		refreshrate := refreshSecondsDay
+		if now.Hour() < 6 { //   Between midnight and 06:00
+			refreshrate = refreshSecondsNight
+		}
 
 		resp, err := json.Marshal(DisplayResponse{
 			FileName:        fmt.Sprintf("screen-%d.png", srv.text.Time.Unix()),
 			ImageUrl:        fmt.Sprintf("http://%s/image", r.Host),
-			RefreshRate:     10,
+			RefreshRate:     refreshrate,
 			SpecialFunction: "sleep",
 		})
+
 		if err != nil {
 			srv.log(fmt.Sprintf("%s Failed to give a viable DISPLAY response: %s", req, err))
 			w.WriteHeader(http.StatusInternalServerError)
