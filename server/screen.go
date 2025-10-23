@@ -13,12 +13,14 @@ import (
 )
 
 const (
-	WIDTH  = 800
-	HEIGHT = 480
+	screenWidth  = 800
+	screenHeight = 480
+	runesPerLine = 42
+	maxLines     = 13
 )
 
 //go:embed "font/White Rabbit.ttf"
-var fontFile []byte
+var fontData []byte
 
 var (
 	fontDescription = FontDescription{
@@ -33,7 +35,7 @@ var (
 		color.RGBA{0, 0, 0, 255},
 		color.White,
 	}
-	StandardBounds = image.Rect(0, 0, WIDTH, HEIGHT)
+	StandardBounds = image.Rect(0, 0, screenWidth, screenHeight)
 )
 
 type FontDescription struct {
@@ -62,7 +64,7 @@ func PrepareFreetypeContext(dst *image.Paletted, src image.Image, font FontDescr
 }
 
 func mustReadFont() *truetype.Font {
-	f, err := truetype.Parse(fontFile)
+	f, err := truetype.Parse(fontData)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
 		os.Exit(1)
@@ -86,6 +88,13 @@ func CreateScreen(text []string) *image.Paletted {
 
 	ctx, baseline := PrepareFreetypeContext(img, &image.Uniform{PaletteBlackWhite[1]}, fontDescription)
 	for i, line := range text {
+		if i > maxLines {
+			break
+		}
+		runes := []rune(line) // Sometimes runes are more than one byte, and len(string) returns number of *bytes*
+		if len(runes) > runesPerLine {
+			line = string(runes[:runesPerLine])
+		}
 		mustDrawText(ctx, 15, (i*baseline)+baseline+fontDescription.Offset, line)
 	}
 

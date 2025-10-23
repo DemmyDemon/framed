@@ -1,13 +1,14 @@
 [X] Load previous text lines from disk
 [X] Save text lines to disk on Ctrl+S
-[ ] Limit line length to TRMNL width
-[ ] Limit line count to TRMNL height
+[X] Limit line length to TRMNL width even though overflowing it doesn't really matter
+[X] Limit line count to TRMNL height
 [X] Fix the damn clean/dirty indicator
 [X] Much quicker updates!
 [X] Lower the update frequency at night
 [X] Update the weekday after midnight
 [X] Have Ctrl+S on the log screen save to
     trmnl.log
+[X] Figure out the display size (42x13)
+[X] Make sure going over it is fine
 [ ] Celebrate
-[ ] Figure out the display length
-[ ] Make sure going over it is fine
+[X] Test overflow
