@@ -160,7 +160,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// This applies even if the text didn't actually change.
 		now := time.Now()
 		if now.Day() != srv.text.Time.Day() {
-			srv.text.Time = now
+			srv.chText <- strings.Join(srv.text.Lines, "\n") // Using the channel just so all updates happen the same way.
 		}
 
 		refreshrate := refreshSecondsDay
