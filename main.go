@@ -2,12 +2,10 @@ package main
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/DemmyDemon/framed/server"
-	"github.com/DemmyDemon/framed/ui"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
@@ -20,40 +18,22 @@ func main() {
 	if len(os.Args) > 1 {
 		filename = os.Args[1]
 	}
-	data, err := os.ReadFile(filename)
+	_, err := os.Stat(filename)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			file, err := os.Create(filename)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Could not create %s: %s", filename, err)
-				os.Exit(1)
+				log.Fatal("Could not create file", filename, err)
 			}
-			data = []byte{}
 			file.Close() // We don't actually need it now, we just want to make it exist, and verify access.
 		} else {
-			fmt.Fprintf(os.Stderr, "Something weird about %s: %s", filename, err)
-			os.Exit(2)
+			log.Fatal("Something weird about this file!", filename, err)
 		}
 	}
-	initialText := string(data)
 
-	chLog, chText, prog := ui.NewUI(initialText, filename)
-	go func() {
-		chLog <- ui.NewLogEntry(fmt.Sprintf("Shall listen on port %d\n", PORT))
-		err := server.Begin(PORT, 1, chLog, chText)
-		if err != nil {
-			fmt.Printf("\nERROR:  %v\n", err)
-			os.Exit(9)
-		}
-	}()
-
-	fmt.Println("UI incoming...")
-
-	p := tea.NewProgram(prog)
-	final, err := p.Run()
+	log.Println("Listening on port", PORT)
+	err = server.Begin(PORT, filename)
 	if err != nil {
-		fmt.Printf("ERROR running UI: %s\n\n", err)
+		log.Fatal("Serve error", err)
 	}
-	fmt.Println(final.View())
-
 }

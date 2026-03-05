@@ -1,14 +1,18 @@
-[X] Load previous text lines from disk
-[X] Save text lines to disk on Ctrl+S
-[X] Limit line length to TRMNL width even though overflowing it doesn't really matter
-[X] Limit line count to TRMNL height
-[X] Fix the damn clean/dirty indicator
-[X] Much quicker updates!
-[X] Lower the update frequency at night
-[X] Update the weekday after midnight
-[X] Have Ctrl+S on the log screen save to
-    trmnl.log
-[X] Figure out the display size (42x13)
-[X] Make sure going over it is fine
-[ ] Celebrate
-[X] Test overflow
+[X] Yank out the TUI.
+[X] Just read from the file.
+[X] Simplify greatly by just using the
+    file mtime.
+[X] Blindly generate the image, trust the
+    mtime, and it being LAN locked.
+[X] Free up the first line, since we don't
+    use the day/week display there anymore.
+[ ] Re-adjust everything to use that line
+    for data from the actual text file.
+[ ] Celebrate a more useful and systemd
+    friendly version!
+[ ] Regret the whole change and breathe a
+    sigh of relief it's all in a git repo.
+[X] Make sure overflow still works as it should, both in length and width.
+[X] Make the display "scroll" if the file
+    is longer than fits. Log display,
+    baby! Yeah!

@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"image/png"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-
-	"github.com/DemmyDemon/framed/ui"
 )
 
 const (
-	refreshSecondsDay   = 10
-	refreshSecondsNight = 600
+	refreshSecondsDay   = 60
+	refreshSecondsNight = 1200
 )
 
 //go:embed html/index.html
@@ -33,61 +33,35 @@ type DisplayResponse struct {
 	SpecialFunction string `json:"special_function"`
 }
 
-type DisplayText struct {
-	Time  time.Time
-	Lines []string
-}
-
-func NewDisplayText(text string) DisplayText {
-	return DisplayText{
-		Lines: strings.Split(text, "\n"),
-		Time:  time.Now(),
-	}
-}
-
-func (dt *DisplayText) Update(text string) {
-	dt.Lines = strings.Split(text, "\n")
-	dt.Time = time.Now()
-}
-
 type Server struct {
 	Port      int
 	Verbosity int
-	chLog     chan ui.LogEntry
-	chText    chan string
-	text      DisplayText
+	Changed   time.Time
+	Filename  string
 }
 
-func Begin(port int, verbosity int, chLog chan ui.LogEntry, chText chan string) error {
+func Begin(port int, filename string) error {
 
 	srv := Server{
-		Port:      port,
-		Verbosity: verbosity,
-		chLog:     chLog,
-		chText:    chText,
-		text:      NewDisplayText("TODO: Make it load the previous text\nfrom disk."),
+		Port:     port,
+		Filename: filename,
 	}
 
-	go srv.updateLines()
+	info, err := os.Stat(filename)
+	if err != nil {
+		return fmt.Errorf("accessing display file: %w", err)
+	}
+	srv.Changed = info.ModTime()
 
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), &srv)
 }
 
-func (srv *Server) updateLines() {
-	for text := range srv.chText {
-		srv.log("Server recieved text update")
-		srv.text.Update(text)
-	}
-}
-
 func (srv Server) log(line ...string) {
-	if srv.Verbosity >= 0 {
-		srv.chLog <- ui.LogEntry{Payload: line}
-	}
+	log.Println(line)
 }
 func (srv Server) verbose(level int, line ...string) {
 	if srv.Verbosity >= level {
-		srv.chLog <- ui.LogEntry{Payload: line}
+		srv.log(line...)
 	}
 }
 
@@ -98,7 +72,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	srv.log(req)
 
 	if !strings.HasPrefix(remote, "192.168.") {
-		fmt.Printf("Request from %s denied outright.\n", r.RemoteAddr)
+		srv.log("Request from %s denied outright.\n", r.RemoteAddr)
 		w.WriteHeader(http.StatusForbidden)
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte(`Not allowed!`))
@@ -114,22 +88,21 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write(indexhtml)
 	case "/image":
+		raw, err := os.ReadFile(srv.Filename)
 
-		_, week := srv.text.Time.ISOWeek()
+		lines := strings.Split(string(raw), "\n")
 
-		lines := []string{
-			fmt.Sprintf("%s, week %d", srv.text.Time.Format("Monday"), week),
+		if len(lines) > 15 {
+			lines = lines[len(lines)-15:]
 		}
-		// FIXME: This is probably subject to race conditions
-		// There might be situations where it's reading the lines while they are being updated.
-		lines = append(lines, srv.text.Lines...)
+
 		screen := CreateScreen(lines)
 
 		w.Header().Set("Content-Type", "image/png")
 
 		// Stuffing it in a buffer first, because .Encode doesn't report size.
 		var buf bytes.Buffer
-		err := png.Encode(&buf, screen)
+		err = png.Encode(&buf, screen)
 		if err != nil {
 			srv.log(fmt.Sprintf("[%s] Failed buffer image data: %s", remote, err))
 			return
@@ -147,32 +120,22 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "/api/display":
 
-		/*
-			Note to future self:
-			The srv.textTime.Unix() in the "filename" makes the filename only change
-			when the text does.
-			That means the TRMNL doesn't fetch the image if it hasn't changed.
-			This sacrifices "updated" battery display, and clock, but whatever. Scrapped features.
-			REMEMBER TO LOWER THE REFRESH RATE IF YOU PUT THIS BACK! XD
-		*/
-
-		// Day changes means weekday needs updating, and maybe week number
-		// This applies even if the text didn't actually change.
-		now := time.Now()
-		if now.Day() != srv.text.Time.Day() {
-			srv.chText <- strings.Join(srv.text.Lines, "\n") // Using the channel just so all updates happen the same way.
+		info, err := os.Stat(srv.Filename)
+		if err != nil {
+			srv.log(fmt.Sprintf("%s failed to poll the file: %s", req, err))
 		}
+		srv.Changed = info.ModTime()
 
 		refreshrate := refreshSecondsDay
-		if now.Hour() < 6 { //   Between midnight and 06:00
+		if time.Now().Hour() < 6 { //   Between midnight and 06:00
 			refreshrate = refreshSecondsNight
 		}
 
 		resp, err := json.Marshal(DisplayResponse{
-			FileName:        fmt.Sprintf("screen-%d.png", srv.text.Time.Unix()),
+			FileName:        fmt.Sprintf("screen-%d.png", srv.Changed.Unix()),
 			ImageUrl:        fmt.Sprintf("http://%s/image", r.Host),
 			RefreshRate:     refreshrate,
-			SpecialFunction: "sleep",
+			SpecialFunction: "", // Was "sleep", not sure what it does. Cargo cult.
 		})
 
 		if err != nil {
