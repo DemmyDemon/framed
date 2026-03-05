@@ -111,7 +111,7 @@ func (srv Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.RequestURI {
 	case "/":
 		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "image/html")
+		w.Header().Set("Content-Type", "text/html")
 		w.Write(indexhtml)
 	case "/image":
 
